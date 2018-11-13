@@ -1,0 +1,77 @@
+---
+title: "Boston Housing Data"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Boston Housing Partial Dependence Plot
+
+First, get dataset.
+
+```{r}
+library("pdp")
+boston <- read.csv("C://Users//user//Desktop//다변량//BostonHousing.csv")
+colnames(boston) <- c("CRIM", "ZN","INDUS", "CHAS","NOX", "RM",
+                      "AGE", "DIS", "RAD", "TAX", "PTRATIO", "B", "LSTAT", "MEDV")
+```
+
+Response Variable: MEDV
+
+Data violate many assumptions(linearity, normality, constant variance)
+
+# Simple linear regression(Harrison and Rubinfeld(1978))
+```{r}
+boston$B <- boston$B-0.63
+attach(boston)
+lm_boston <- lm(log(MEDV) ~ RM^2+AGE+log(DIS)+log(RAD)+TAX+PTRATIO+B^2+log(LSTAT)+CRIM+ZN+INDUS+CHAS+NOX^2)
+summary(lm_boston) #R-squared: 0.8035
+detach(boston)
+```
+PDPs are useful for visualizing the relationships discovered by complex machine learning algorithms
+
+Two most important functions exported by pdp are: "partial", "plotPartial"
+
+development ver: https://github.com/bgreenwell/pdp
+
+supported models include:: Decision tree, Bagged decision trees, Boosted decision trees, Linear model, Multivariate adaptive regression splines, Random forest, Support vector machine , ...
+
+## Random Forest
+```{r}
+library(randomForest)
+set.seed(101) # for reproducibility
+boston.rf <- randomForest(MEDV ~ ., data = boston, importance = TRUE)
+boston.rf
+varImpPlot(boston.rf) # Importance scores
+```
+
+percentage of lower status of the population(LSTAT) and average number of rooms per dwelling(RM) are highly associated with MEDV. Drawing partial dependence plot of MEDV on LSTAT, RM might help understanding nature of these associations.
+
+```{r}
+partialPlot(boston.rf, pred.data = boston, x.var = "LSTAT")
+#partial plot uses lattice graphic, so use print.lattice function
+library("UsingR")
+par(mfrow=c(1,2))
+# Left: default plot based on Random Forest
+print(partial(boston.rf, pred.var = "LSTAT", plot = TRUE), position = c(0, 0, 0.5, 1), more = TRUE)
+# Right: adds LOESS smooth
+print(boston.rf %>% partial(pred.var = "LSTAT") %>%
+  plotPartial(smooth = TRUE, lwd = 2, ylab = expression(f(LSTAT))), position = c(0.5, 0, 1, 1))
+```
+
+```{r}
+# Compute partial dependence data for LSTAT and RM
+pd <- partial(boston.rf, pred.var = c("LSTAT", "RM"))
+
+# Add contour lines and use a different color palette
+col <- colorRampPalette(c("coral1", "firebrick1", "gray0"))
+boston_contour <- plotPartial(pd, contour = TRUE, col.regions = col)
+
+# 3-D surface
+boston_3d <- plotPartial(pd, levelplot = FALSE, zlab = "cmedv", drape = TRUE,
+                    colorkey = TRUE, screen = list(z = -20, x = -60))
+# Contour lines
+grid.arrange(boston_contour, boston_3d, ncol = 2)
+```
