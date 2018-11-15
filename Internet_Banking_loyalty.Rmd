@@ -1,0 +1,135 @@
+---
+title: "인터넷 뱅킹 고객의 '충성도'에 미치는 변인 Factor analysis"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Settings
+* Survey Data.
+* Each of the X variables have 1-5 scale scores about loyalty.
+* Y is loyalty(1-5)
+
+## Data Glimpse 
+
+```{r}
+library(dplyr)
+survey <- read.csv("C://Users//user//Desktop//github//Rproject//newRproject//survey_dt.csv")
+glimpse(survey)
+```
+> 305 observations, with 34 variables.
+
+> '성별', '직업', '유형' : Nominal Variables
+
+```{r}
+library(corrr)
+
+survey_plot <- survey %>%
+  select(-충성도1,-충성도2,-충성도3,-충성도4,-충성도5,
+         -연령,-학력,-거래기간,-뱅킹이용이간,-뱅킹갯수,-성별,-직업,-유형) %>%
+  correlate() %>%
+  rearrange() %>%
+  shave()
+
+fashion(survey_plot)
+rplot(survey_plot)
+```
+
+Correlation is really high. Let's draw a network plot
+
+```{r}
+survey_new <- survey %>%
+  select(-충성도1,-충성도2,-충성도3,-충성도4,-충성도5,-연령,-학력,-거래기간,-뱅킹이용이간,-뱅킹갯수,-성별,-직업,-유형)
+survey_new %>%
+  correlate() %>%
+  network_plot(min_cor = 0.2)
+```
+
+**Variable selection is needed.**
+
+##PCA
+
+#### Scree plot을 그려보자.
+
+```{r}
+library(factoextra)
+pca.result <- prcomp(survey_new, scale=T)
+pca.result
+fviz_eig(pca.result)
+```
+
+**Scree plot**에서, 설명력이 급격하게 감소하는 지점에서 **latent factor**의 개수를 정하자. 2개로 정했다.
+
+fviz_pca_var 함수 이용
+
+Positive correlated variables point to the same side. 
+
+```{r}
+fviz_pca_var(pca.result,
+             col.var = "contrib", # Color by contributions to the PC
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+             repel = TRUE     # Avoid text overlapping
+)
+```
+
+##먼저 varimax rotation을 하지 않은 Factor Analysis.
+
+r의 기본 내장함수인 factanal 함수가 있다.
+
+```{r}
+fa1 <- factanal(survey_new, factor=2, rotation="none")
+print(fa1, sort=T, cutoff=0)
+```
+
+##다음은 varimax rotation을 한 Factor Analysis.
+
+```{r}
+fa2 <- factanal(survey_new, factor=2, rotation="varimax")
+print(fa2, sort=T, cutoff=0)
+```
+
+Rotation을 시켜주니, loading 값들이 아까보다는 차이가 많이 나는 듯 하다. 주의할 점은, **rotation** 을 시켜주었을 때 factor들 간 covariance에는 변함이 없다. 즉, factor들이 전체 분산을 설명하는 설명력에는 변함이 없다.
+
+###해석
+1.Uniquenesses: Specific vatiance/Var(X1). 값이 높으면 선택한 요인들에 잘 속하지 않음을 의미한다.
+
+Note: Var($X_1) = Communality + Specific variance
+
+2.Proportion Var: Variance explained by each factor/Total Variance(전체 데이터)
+
+여기서는 첫 번째factor에 의해 전체 분산의 0.376가, 두 번째 factor에 의해 전체의 0.228가 설명됨을 의미한다. 첫 번째, 두 번째 요인에 의해 전체 분산의 0.604가 설명된다.
+
+3.Chi-square test: 
+> NULL hypothesis: "2 factors are sufficient to explain our dataset"
+
+> Alternative hypothesis: not H0
+
+p-value값이 매우 낮다. 2 factors are **NOT** sufficient to explain our dataset.
+
+### Rotation 전, 후의 차이 시각화
+
+#### Rotation 전
+
+```{r}
+load <- fa1$loadings[,1:2] 
+plot(load, type="n",xlim=c(-1,1), ylim=c(-1,1))  
+text(load, labels=names(survey_new), cex=.7) 
+abline(0,0)
+abline(v=0)
+
+```
+
+#### Rotation 후
+
+```{r}
+load <- fa2$loadings[,1:2] 
+plot(load, type="n",xlim=c(-1,1), ylim=c(-1,1))  
+text(load, labels=names(survey_new), cex=.7) 
+abline(0,0)
+abline(v=0)
+```
+
+### Factor에 이름 붙이기
+Factor에 이름붙이는 과정은 매우 주관적이다. Latent Variable이기 때문이다. Facor1은 품질과 관련되어 있고, Factor2는 사회적 실재감으로 둘 수 있다. 
